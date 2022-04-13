@@ -55,6 +55,54 @@ class Tester(object):
                 self.inference()
                 self.evaluate()
 
+    def test_sbumit(self):
+
+        # test a single checkpoint
+        assert os.path.exists(self.cfg['checkpoint'])
+        load_checkpoint(model=self.model,
+                        optimizer=None,
+                        filename=self.cfg['checkpoint'],
+                        map_location=self.device,
+                        logger=self.logger)
+        self.model.to(self.device)
+        self.inference_test()
+
+
+    def inference_test(self, savename=None):
+        torch.set_grad_enabled(False)
+        self.model.eval()
+
+        results = {}
+        progress_bar = tqdm.tqdm(total=len(self.dataloader), leave=True, desc='Evaluation Progress')
+        for batch_idx, (inputs, info) in enumerate(self.dataloader):
+            # load evaluation data and move data to GPU.
+            for key in inputs.keys():
+                inputs[key] = inputs[key].to(self.device)
+            #inputs = inputs.to(self.device)
+            _, outputs = self.model(inputs)
+            dets = extract_dets_from_outputs(outputs=outputs, K=self.max_objs)
+            dets = dets.detach().cpu().numpy()
+
+            # get corresponding calibs & transform tensor to numpy
+            calibs = [self.dataloader.dataset.get_calib(index)  for index in info['img_id']]
+            info = {key: val.detach().cpu().numpy() for key, val in info.items()}
+            cls_mean_size = self.dataloader.dataset.cls_mean_size
+            dets = decode_detections(dets=dets,
+                                     info=info,
+                                     calibs=calibs,
+                                     cls_mean_size=cls_mean_size,
+                                     threshold=self.cfg.get('threshold', 0.2))
+            results.update(dets)
+            progress_bar.update()
+
+        progress_bar.close()
+
+        # save the result for evaluation.
+        self.logger.info('==> Saving ...')
+        if savename is None:
+            self.save_results(results, './test_outputs')
+        else:
+            self.save_results(results)
 
 
     def inference(self):

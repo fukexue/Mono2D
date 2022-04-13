@@ -130,10 +130,12 @@ class KITTI_Dataset(data.Dataset):
         # image loading
         #  ============================   get labels   ==============================
         img = self.get_image(index)
-        depth_map = self.get_gt_depth(index)
 
         if self.split != 'test':
             objects = self.get_label(index)
+            depth_map = self.get_gt_depth(index)
+        else:
+            depth_map = 0
 
         calib = self.get_calib(index)
         img_size = np.array(img.size)
@@ -164,20 +166,6 @@ class KITTI_Dataset(data.Dataset):
                             data=tuple(trans_inv.reshape(-1).tolist()),
                             resample=Image.BILINEAR)
 
-
-        depth_map = depth_map.transform(tuple(self.resolution.tolist()),
-                                            method=Image.AFFINE,
-                                            data=tuple(trans_inv.reshape(-1).tolist()),
-                                            resample=Image.BILINEAR)
-
-        depth_map = np.array(depth_map).astype(np.float32) / 256.0
-        depth_map = depth_map * aug_scale
-        depth_map = np.expand_dims(depth_map, 2)
-        depth_map = np.repeat(depth_map, 3, 2)
-        depth_map = depth_map / 80.0
-        depth_map = (depth_map - self.gt_depth_mean) / self.gt_depth_std
-        depth_map = depth_map.transpose(2, 0, 1)  # C * H * W
-
         img = np.array(img).astype(np.float32) / 255.0
         if self.data_augmentation:
            color_aug(self._data_rng, img, self._eig_val, self._eig_vec)
@@ -193,6 +181,19 @@ class KITTI_Dataset(data.Dataset):
             inputs['rgb'] = img
 
             return inputs, info  # img / placeholder(fake label) / info
+
+        depth_map = depth_map.transform(tuple(self.resolution.tolist()),
+                                            method=Image.AFFINE,
+                                            data=tuple(trans_inv.reshape(-1).tolist()),
+                                            resample=Image.BILINEAR)
+
+        depth_map = np.array(depth_map).astype(np.float32) / 256.0
+        depth_map = depth_map * aug_scale
+        depth_map = np.expand_dims(depth_map, 2)
+        depth_map = np.repeat(depth_map, 3, 2)
+        depth_map = depth_map / 80.0
+        depth_map = (depth_map - self.gt_depth_mean) / self.gt_depth_std
+        depth_map = depth_map.transpose(2, 0, 1)  # C * H * W
 
         # computed 3d projected box
         if self.bbox2d_type == 'proj':  # default: anno

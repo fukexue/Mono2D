@@ -14,8 +14,9 @@ def build_dataloader(cfg, workers=4):
 
     # perpare dataset
     if cfg['type'] == 'KITTI':
-        train_set = KITTI_Dataset(split='train', cfg=cfg)
-        test_set = KITTI_Dataset(split='val', cfg=cfg)
+        train_set = KITTI_Dataset(split='train' if cfg['split']==0 else 'trainval', cfg=cfg)
+        val_set = KITTI_Dataset(split='val', cfg=cfg)
+        test_set = KITTI_Dataset(split='test', cfg=cfg)
     else:
         raise NotImplementedError("%s dataset is not supported" % cfg['type'])
 
@@ -27,6 +28,13 @@ def build_dataloader(cfg, workers=4):
                               shuffle=True,
                               pin_memory=True,
                               drop_last=True)
+    val_loader = DataLoader(dataset=val_set,
+                             batch_size=cfg['batch_size'],
+                             num_workers=workers,
+                             worker_init_fn=my_worker_init_fn,
+                             shuffle=False,
+                             pin_memory=True,
+                             drop_last=False)
     test_loader = DataLoader(dataset=test_set,
                              batch_size=cfg['batch_size'],
                              num_workers=workers,
@@ -35,4 +43,4 @@ def build_dataloader(cfg, workers=4):
                              pin_memory=True,
                              drop_last=False)
 
-    return train_loader, test_loader
+    return train_loader, val_loader, test_loader

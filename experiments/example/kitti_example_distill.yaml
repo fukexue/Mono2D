@@ -1,4 +1,4 @@
-random_seed: 444
+random_seed: 10
 
 dataset:
   type: &dataset_type 'KITTI'
@@ -13,6 +13,7 @@ dataset:
   random_crop: 0.5
   scale: 0.4
   shift: 0.0
+  split: 0
 
 model:
   type: 'distill'  #centernet3d or distill_seperate or distill
@@ -35,13 +36,13 @@ trainer:
   gpu_ids: 2,3
   save_frequency: 10 # checkpoint save interval (in epoch)
   model_save_path: 'monodistill'
-  pretrain_model: {'rgb':'./rgb_pretrain.pth','depth':'./depth_pretrain.pth'}
+  pretrain_model: {'rgb':'./1_pretrain/rgb_pretrain.pth','depth':'./1_pretrain/depth_pretrain.pth'}
   #resume_model: {'rgb':'checkpoints_share_head/checkpoint_epoch_300_rgb.pth','depth':'checkpoints_no_distill_seperate/checkpoint_epoch_140_depth.pth'}
 
 
 tester:
   type: *dataset_type
-  mode: all   # 'single' or 'all'
-  checkpoint: 'distill/checkpoint_epoch_160.pth'  # for 'single' mode
+  mode: single   # 'single' or 'all'
+  checkpoint: './1_pretrain/distill.pth'  # for 'single' mode
   checkpoints_dir: 'monodistill'  # for 'all' model
   threshold: 0.2  # confidence filter

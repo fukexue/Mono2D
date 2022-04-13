@@ -23,7 +23,7 @@ from lib.helpers.utils_helper import set_random_seed
 parser = argparse.ArgumentParser(description='Monocular 3D Object Detection')
 parser.add_argument('--config', dest='config', help='settings of detection in yaml format')
 parser.add_argument('-e', '--evaluate_only', action='store_true', default=False, help='evaluation only')
-parser.add_argument('-t', '--submit_test', action='store_true', default=False, help='for website test only')
+parser.add_argument('-t', '--test_only', action='store_true', default=False, help='for website test only')
 
 args = parser.parse_args()
 

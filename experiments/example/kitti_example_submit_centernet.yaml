@@ -13,7 +13,7 @@ dataset:
   random_crop: 0.5
   scale: 0.4
   shift: 0.0
-  split: 0
+  split: 1
 
 model:
   type: 'centernet3d'  #centernet3d or distill_seperate or distill
@@ -43,6 +43,6 @@ trainer:
 tester:
   type: *dataset_type
   mode: single   # 'single' or 'all'
-  checkpoint: './rgb_baseline/checkpoint_epoch_140.pth'  # for 'single' mode
+  checkpoint: './1_pretrain/rgb_pretrain.pth'  # for 'single' mode
   checkpoints_dir: 'rgb_baseline'  # for 'all' model
   threshold: 0.2  # confidence filter
