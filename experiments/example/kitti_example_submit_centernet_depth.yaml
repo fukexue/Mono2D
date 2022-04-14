@@ -45,5 +45,5 @@ tester:
   type: *dataset_type
   mode: single   # 'single' or 'all'
   checkpoint: './1_pretrain/rgb_pretrain.pth'  # for 'single' mode
-  checkpoints_dir: 'rgb_baseline'  # for 'all' model
+  checkpoints_dir: 'depth_baseline'  # for 'all' model
   threshold: 0.2  # confidence filter
