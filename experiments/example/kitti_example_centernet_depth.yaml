@@ -13,13 +13,14 @@ dataset:
   random_crop: 0.5
   scale: 0.4
   shift: 0.0
-  split: 1
+  split: 0
 
 model:
   type: 'centernet3d'  #centernet3d or distill_seperate or distill
   backbone: 'dla34'
   neck: 'DLAUp'
   num_class: 3
+  input: 'depth'
 
 optimizer:
   type: 'adam'

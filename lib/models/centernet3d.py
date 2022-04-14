@@ -12,7 +12,7 @@ from lib.backbones.hourglass import load_pretrian_model
 
 
 class CenterNet3D(nn.Module):
-    def __init__(self, backbone='dla34', neck='DLAUp', num_class=3, downsample=4, flag='training', model_type='centernet3d'):
+    def __init__(self, backbone='dla34', neck='DLAUp', num_class=3, downsample=4, flag='training', model_type='centernet3d', input_type='rgb'):
         """
         CenterNet for monocular 3D object detection.
         :param backbone: the backbone of pipeline, such as dla34.
@@ -23,6 +23,7 @@ class CenterNet3D(nn.Module):
         assert downsample in [4, 8, 16, 32]
         super().__init__()
         self.flag = flag
+        self.input_type = input_type
         self.model_type = model_type
         self.feature_flag = backbone
         self.first_level = int(np.log2(downsample))
@@ -51,7 +52,10 @@ class CenterNet3D(nn.Module):
 
     def forward(self, input):
         if self.model_type == 'centernet3d':
-            input = input['rgb']
+            if self.input_type == 'rgb':
+                input = input['rgb']
+            elif self.input_type == 'depth':
+                input = input['depth']
         feat_backbone = self.backbone(input)
         feat = self.neck(feat_backbone[self.first_level:])  # first_level = 2
 
