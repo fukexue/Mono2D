@@ -36,7 +36,7 @@ trainer:
   max_epoch: 140
   gpu_ids: 0,1
   save_frequency: 10 # checkpoint save interval (in epoch)
-  model_save_path: 'rgb_baseline'
+  model_save_path: 'depth_baseline'
   #resume_model: ''
 
 
