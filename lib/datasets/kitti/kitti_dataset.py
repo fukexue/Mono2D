@@ -227,8 +227,8 @@ class KITTI_Dataset(data.Dataset):
         size_3d = np.zeros((self.max_objs, 3), dtype=np.float32)
         offset_3d = np.zeros((self.max_objs, 2), dtype=np.float32)
         indices = np.zeros((self.max_objs), dtype=np.int64)
-        mask_2d = np.zeros((self.max_objs), dtype=np.uint8)
-        mask_3d = np.zeros((self.max_objs), dtype=np.uint8)
+        mask_2d = np.zeros((self.max_objs), dtype=np.bool_)
+        mask_3d = np.zeros((self.max_objs), dtype=np.bool_)
         object_num = len(objects) if len(objects) < self.max_objs else self.max_objs
         for i in range(object_num):
             # filter objects by writelist
