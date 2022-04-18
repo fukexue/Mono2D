@@ -184,7 +184,7 @@ class Trainer(object):
 
             # train one batch
             self.optimizer.zero_grad()
-            _, outputs = self.model(inputs['rgb'])
+            _, outputs = self.model(inputs)
 
             rgb_loss, rgb_stats_batch = compute_centernet3d_loss(outputs, targets)
             # depth_loss, depth_stats_batch = compute_depth_centernet3d_loss(depth_outputs, targets)
