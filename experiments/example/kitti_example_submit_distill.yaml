@@ -13,7 +13,7 @@ dataset:
   random_crop: 0.5
   scale: 0.4
   shift: 0.0
-  split: 1
+  split: 1         # 0:use train split, 1: use trainval split
 
 model:
   type: 'distill'  #centernet3d or distill_seperate or distill
