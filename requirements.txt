@@ -7,3 +7,4 @@ progress
 opencv-python
 einops
 matplotlib
+timm==0.3.2
