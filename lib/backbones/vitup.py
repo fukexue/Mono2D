@@ -57,12 +57,14 @@ class VITUp_2(nn.Module):
 
 
 class VITUp(nn.Module):
-    def __init__(self, embed_dim):
+    def __init__(self, embed_dim, out_channel=64):
         super(VITUp, self).__init__()
-        self.fpn1 = nn.Identity()
-        self.fpn2 = nn.Identity()
-        self.fpn3 = nn.Identity()
-        self.fpn4 = nn.Identity()
+        self.fpn1 = nn.Conv2d(embed_dim, out_channel, kernel_size=1)
+        self.fpn2 = nn.Conv2d(embed_dim, out_channel, kernel_size=1)
+        self.fpn3 = nn.Conv2d(embed_dim, out_channel, kernel_size=1)
+        self.fpn4 = nn.Conv2d(embed_dim, out_channel, kernel_size=1)
+
+        self.out_channel = out_channel
 
     def forward(self, x):
 
@@ -71,5 +73,5 @@ class VITUp(nn.Module):
         for i in range(len(ops)):
             features.append(ops[i](x[i]))
 
-        return features[-1]
+        return features[0]
 
