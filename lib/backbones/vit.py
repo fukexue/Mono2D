@@ -331,7 +331,7 @@ class VisionTransformer(nn.Module):
         x = self.norm(x)
         xp = x.permute(0, 2, 1).reshape(B, -1, Hp, Wp)
 
-        xp = F.interpolate(xp, [H//self.patch_embed.patch_size, W//self.patch_embed.patch_size], mode='bilinear')
+        xp = F.interpolate(xp, [H//self.patch_embed.patch_size[0], W//self.patch_embed.patch_size[1]], mode='bilinear')
         ops = [self.fpn0, self.fpn1, self.fpn2, self.fpn3, self.fpn4, self.fpn5]
         features = []
         for i in range(len(ops)):
