@@ -23,6 +23,7 @@ Hacked together by / Copyright 2020 Ross Wightman
 import math
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from functools import partial
 
 from timm.data import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
@@ -37,6 +38,7 @@ def _cfg(url='', **kwargs):
         'crop_pct': .9, 'interpolation': 'bicubic',
         'mean': IMAGENET_DEFAULT_MEAN, 'std': IMAGENET_DEFAULT_STD,
         'first_conv': 'patch_embed.proj', 'classifier': 'head',
+        'local': False,
         **kwargs
     }
 
@@ -49,6 +51,11 @@ default_cfgs = {
     'vit_base_patch16_224': _cfg(
         url='https://github.com/rwightman/pytorch-image-models/releases/download/v0.1-vitjx/jx_vit_base_p16_224-80ecf9dd.pth',
         mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5),
+    ),
+    'vit_base_patch16_224_local': _cfg(
+        url='../../weight/mae_pretrain_vit_base.pth',
+        mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5),
+        local=True
     ),
     'vit_base_patch16_384': _cfg(
         url='https://github.com/rwightman/pytorch-image-models/releases/download/v0.1-vitjx/jx_vit_base_p16_384-83fb41ba.pth',
@@ -309,6 +316,9 @@ class VisionTransformer(nn.Module):
 
     def forward_features(self, x):
         B, C, H, W = x.shape
+
+        x = F.interpolate(x, self.patch_embed.img_size, mode='bilinear')
+
         x, (Hp, Wp) = self.patch_embed(x)
         # batch_size, seq_len, _ = x.size()
 
@@ -321,6 +331,7 @@ class VisionTransformer(nn.Module):
         x = self.norm(x)
         xp = x.permute(0, 2, 1).reshape(B, -1, Hp, Wp)
 
+        xp = F.interpolate(xp, [H//self.patch_embed.patch_size, W//self.patch_embed.patch_size], mode='bilinear')
         ops = [self.fpn0, self.fpn1, self.fpn2, self.fpn3, self.fpn4, self.fpn5]
         features = []
         for i in range(len(ops)):
@@ -342,15 +353,111 @@ def _conv_filter(state_dict, patch_size=16):
         out_dict[k] = v
     return out_dict
 
+def load_pretrained(model, cfg=None, num_classes=1000, in_chans=3, filter_fn=None, strict=True):
+    import torch.utils.model_zoo as model_zoo
+    if cfg is None:
+        cfg = getattr(model, 'default_cfg')
+    if cfg is None or 'url' not in cfg or not cfg['url']:
+        print("Pretrained model URL is invalid, using random initialization.")
+        return
+
+    if cfg['local']:
+        state_dict = torch.load(cfg['url'], map_location='cpu')['model']
+    else:
+        state_dict = model_zoo.load_url(cfg['url'], progress=False, map_location='cpu')
+
+    if filter_fn is not None:
+        state_dict = filter_fn(state_dict)
+
+    if in_chans == 1:
+        conv1_name = cfg['first_conv']
+        print('Converting first conv (%s) pretrained weights from 3 to 1 channel' % conv1_name)
+        conv1_weight = state_dict[conv1_name + '.weight']
+        # Some weights are in torch.half, ensure it's float for sum on CPU
+        conv1_type = conv1_weight.dtype
+        conv1_weight = conv1_weight.float()
+        O, I, J, K = conv1_weight.shape
+        if I > 3:
+            assert conv1_weight.shape[1] % 3 == 0
+            # For models with space2depth stems
+            conv1_weight = conv1_weight.reshape(O, I // 3, 3, J, K)
+            conv1_weight = conv1_weight.sum(dim=2, keepdim=False)
+        else:
+            conv1_weight = conv1_weight.sum(dim=1, keepdim=True)
+        conv1_weight = conv1_weight.to(conv1_type)
+        state_dict[conv1_name + '.weight'] = conv1_weight
+    elif in_chans != 3:
+        conv1_name = cfg['first_conv']
+        conv1_weight = state_dict[conv1_name + '.weight']
+        conv1_type = conv1_weight.dtype
+        conv1_weight = conv1_weight.float()
+        O, I, J, K = conv1_weight.shape
+        if I != 3:
+            print('Deleting first conv (%s) from pretrained weights.' % conv1_name)
+            del state_dict[conv1_name + '.weight']
+            strict = False
+        else:
+            # NOTE this strategy should be better than random init, but there could be other combinations of
+            # the original RGB input layer weights that'd work better for specific cases.
+            print('Repeating first conv (%s) weights in channel dim.' % conv1_name)
+            repeat = int(math.ceil(in_chans / 3))
+            conv1_weight = conv1_weight.repeat(1, repeat, 1, 1)[:, :in_chans, :, :]
+            conv1_weight *= (3 / float(in_chans))
+            conv1_weight = conv1_weight.to(conv1_type)
+            state_dict[conv1_name + '.weight'] = conv1_weight
+
+    classifier_name = cfg['classifier']
+    if num_classes == 1000 and cfg['num_classes'] == 1001:
+        # special case for imagenet trained models with extra background class in pretrained weights
+        classifier_weight = state_dict[classifier_name + '.weight']
+        state_dict[classifier_name + '.weight'] = classifier_weight[1:]
+        classifier_bias = state_dict[classifier_name + '.bias']
+        state_dict[classifier_name + '.bias'] = classifier_bias[1:]
+    elif num_classes != cfg['num_classes']:
+        # completely discard fully connected for all other differences between pretrained and created model
+        del state_dict[classifier_name + '.weight']
+        del state_dict[classifier_name + '.bias']
+        strict = False
+
+    if 'pos_embed' in state_dict:
+        pos_embed_checkpoint = state_dict['pos_embed']
+        embedding_size = pos_embed_checkpoint.shape[-1]
+        H, W = model.patch_embed.patch_shape
+        num_patches = model.patch_embed.num_patches
+        num_extra_tokens = 1
+        # height (== width) for the checkpoint position embedding
+        orig_size = int((pos_embed_checkpoint.shape[-2] - num_extra_tokens) ** 0.5)
+        # height (== width) for the new position embedding
+        new_size = int(num_patches ** 0.5)
+        # class_token and dist_token are kept unchanged
+        if orig_size != new_size:
+            # if rank == 0:
+            print("Position interpolate from %dx%d to %dx%d" % (orig_size, orig_size, H, W))
+            # extra_tokens = pos_embed_checkpoint[:, :num_extra_tokens]
+            # only the position tokens are interpolated
+            pos_tokens = pos_embed_checkpoint[:, num_extra_tokens:]
+            pos_tokens = pos_tokens.reshape(-1, orig_size, orig_size, embedding_size).permute(0, 3, 1, 2)
+            pos_tokens = torch.nn.functional.interpolate(
+                pos_tokens, size=(H, W), mode='bicubic', align_corners=False)
+            new_pos_embed = pos_tokens.permute(0, 2, 3, 1).flatten(1, 2)
+            # new_pos_embed = torch.cat((extra_tokens, pos_tokens), dim=1)
+            state_dict['pos_embed'] = new_pos_embed
+        else:
+            print("delete cls pos")
+            pos_tokens = pos_embed_checkpoint[:, num_extra_tokens:]
+            state_dict['pos_embed'] = pos_tokens
+
+    model.load_state_dict(state_dict, strict=strict)
+
 
 
 def vit_base_patch16(pretrained=False, **kwargs):
     model = VisionTransformer(
         patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
+    model.default_cfg = default_cfgs['vit_base_patch16_224_local']
     if pretrained:
-        msg = model.load_state_dict('../../weight/mae_pretrain_vit_base.pth', strict=False)
-        print('Pretrained weights found at {} and loaded with msg: {}'.format('../../weight/mae_pretrain_vit_base.pth', msg))
+        load_pretrained(model, num_classes=model.num_classes, in_chans=kwargs.get('in_chans', 3), filter_fn=_conv_filter, strict=False)
     return model
 
 
